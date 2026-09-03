@@ -31,12 +31,37 @@ Discovered by probing the V3 API:
 
 | | |
 |---|---|
-| Read | `GET /v3/devices/{serial}` |
-| Write | `PATCH /v3/devices/{serial}` |
 | Auth | `POST /v3/login`, `POST /v3/refresh` |
+| Read | `GET /v3/devices/{serial}` |
+| Read (MAC, setpoint limits) | `GET /v3/devices/{serial}/status` |
+| **Write** | **`POST /v3/devices/send-command`** |
 
-Writable fields: `power`, `operationMode`, `spCool`, `spHeat`, `spAuto`,
-`fanSpeed`, `airDirection`.
+Write body, sending only what changes:
+
+```json
+{"deviceSerial": "<serial>", "commands": {"fanSpeed": "quiet"}}
+```
+
+Command keys: `power`, `operationMode`, `spCool`, `spHeat`, `spAuto`,
+`fanSpeed`, `airDirection`. The **`app-env: prd`** header is required alongside
+`Authorization: Bearer` and `x-app-version`. The response is only
+`{"devices":[serial]}` — no state — so re-read afterwards. Commands land in
+about 4 seconds.
+
+### Dead ends, documented so nobody repeats them
+
+`PATCH /v3/devices/{serial}` (and `/v3/zones/{id}`) return HTTP 200, bump only
+`updatedAt`, and **silently ignore the request body** — verified with six
+payload shapes at 1-second polling resolution. No `/commands` sub-resource
+exists anywhere under `/v3/{devices,zones,adapters,sites}`. Socket.IO is for
+*receiving* push updates only; it does not accept commands.
+
+Beware validating a write with a **no-op** (writing a field back to its own
+value): a 200 plus an unchanged read is indistinguishable from an ignored
+write. Always write a *changed* value and re-read.
+
+Credit: the `send-command` endpoint is documented in
+[ventz/kumo-cloud-v3-api-comfort-client](https://github.com/ventz/kumo-cloud-v3-api-comfort-client).
 
 ## Fan speeds and Apple Home
 
@@ -83,11 +108,29 @@ behaviour, not an API limit. The cloud's reported `fanSpeed` is also sticky in
 this mode: a write is accepted but the value that comes back is the one the
 adapter last reported, which can lag by minutes.
 
-The climate entity therefore exposes `fan_speed_locked` and refuses a fan-speed
-call while in dry mode, rather than letting it silently do nothing.
+The climate entity exposes `fan_speed_locked` as an advisory attribute. It does
+*not* refuse the call: the flag derives from the cloud's `operationMode`, which
+lags by minutes, so blocking would reject a legitimate fan change made right
+after leaving dry mode.
 
 HomeKit's Thermostat service has only Off/Heat/Cool/Auto, and Home Assistant's
 bridge drops `HVACMode.DRY` whenever `COOL` is also offered, so dry is
 unreachable from Apple Home through the thermostat. Each unit therefore also
 gets a **Dry mode** switch, which Apple Home and Siri can see. Turning it off
 returns the unit to its `previousOperationMode`.
+
+## Why not local control?
+
+The units also expose a local HTTP API (`PUT http://<ip>/api?m=<token>`) that
+does reads and writes with no cloud involved, which would be strictly better.
+Its token is `SHA256(W_PARAM ‖ SHA256(password ‖ body) ‖ 0x0840 ‖ … ‖
+cryptoSerial bytes)` — no nonce, so tokens are stable per body.
+
+It needs a per-device `password` and `cryptoSerial`, and the V3 cloud returns
+both as **empty strings**. This is not specific to this integration: the
+current `pykumo` (0.5.3) reports `found passwords for 0/5 devices` against the
+same account, and it is tracked upstream as
+[pykumo#78](https://github.com/dlarrick/pykumo/issues/78) (open since
+2026-07-31) with no known workaround. The units themselves still answer on the
+local API — they just reject unauthenticated requests — so if the credentials
+ever become obtainable again, a local path is worth adding.

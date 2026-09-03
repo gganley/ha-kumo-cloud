@@ -69,14 +69,15 @@ class KumoCloudCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         """Return the last known state of one unit."""
         return self.data.get(serial, {}) if self.data else {}
 
-    async def async_patch(self, serial: str, changes: dict[str, Any]) -> None:
-        """Write state to a unit and fold the response back into the cache."""
+    async def async_send_command(self, serial: str, commands: dict[str, Any]) -> None:
+        """Send a command to a unit, then refresh so state reflects it.
+
+        The command endpoint does not return the new device state, and the unit
+        takes a few seconds to apply and report back, so request a refresh
+        rather than trying to predict the result.
+        """
         try:
-            updated = await self.api.async_patch_device(serial, changes)
+            await self.api.async_send_command(serial, commands)
         except KumoCloudAuthError as err:
             raise ConfigEntryAuthFailed(str(err)) from err
-
-        if isinstance(updated, dict) and self.data is not None:
-            merged = dict(self.data)
-            merged[serial] = updated
-            self.async_set_updated_data(merged)
+        await self.async_request_refresh()

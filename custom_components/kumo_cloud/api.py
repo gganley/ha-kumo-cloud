@@ -27,6 +27,7 @@ _BASE_HEADERS = {
     "Accept": "application/json",
     "Content-Type": "application/json",
     "x-app-version": APP_VERSION,
+    "app-env": "prd",
 }
 
 
@@ -171,9 +172,23 @@ class KumoCloudApi:
         """
         return await self._async_request("GET", f"/v3/devices/{serial}/status")
 
-    async def async_patch_device(
-        self, serial: str, changes: dict[str, Any]
-    ) -> dict[str, Any]:
-        """Write state to one indoor unit and return the resulting device object."""
-        _LOGGER.debug("PATCH device %s: %s", serial, changes)
-        return await self._async_request("PATCH", f"/v3/devices/{serial}", json=changes)
+    async def async_send_command(
+        self, serial: str, commands: dict[str, Any]
+    ) -> None:
+        """Write state to one indoor unit.
+
+        Control goes through POST /v3/devices/send-command, NOT a PATCH of the
+        device object -- a PATCH returns 200 but silently ignores the body. The
+        `app-env: prd` header is required; without it the command endpoint
+        rejects the call. Valid command keys: operationMode, spCool, spHeat,
+        spAuto, power, fanSpeed, airDirection. Send only what is changing.
+
+        Returns nothing useful (the response is just {"devices": [serial]}); the
+        caller should re-read state to observe the change.
+        """
+        _LOGGER.debug("send-command %s: %s", serial, commands)
+        await self._async_request(
+            "POST",
+            "/v3/devices/send-command",
+            json={"deviceSerial": serial, "commands": commands},
+        )

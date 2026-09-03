@@ -12,7 +12,6 @@ from homeassistant.components.climate import (
     HVACMode,
 )
 from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
-from homeassistant.exceptions import ServiceValidationError
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC, DeviceInfo
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
@@ -190,20 +189,20 @@ class KumoCloudClimate(CoordinatorEntity[KumoCloudCoordinator], ClimateEntity):
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         """Set the operating mode, powering the unit on or off as needed."""
         if hvac_mode is HVACMode.OFF:
-            await self._async_patch({"power": 0})
+            await self._async_command({"power": 0})
             return
-        await self._async_patch(
+        await self._async_command(
             {"power": 1, "operationMode": HVAC_MODE_TO_CLOUD[hvac_mode]}
         )
 
     async def async_turn_on(self) -> None:
         """Power the unit on, restoring the mode it was last in."""
         previous = self._state.get("previousOperationMode") or "cool"
-        await self._async_patch({"power": 1, "operationMode": previous})
+        await self._async_command({"power": 1, "operationMode": previous})
 
     async def async_turn_off(self) -> None:
         """Power the unit off."""
-        await self._async_patch({"power": 0})
+        await self._async_command({"power": 0})
 
     async def async_set_temperature(self, **kwargs: Any) -> None:
         """Set one or both setpoints."""
@@ -218,21 +217,23 @@ class KumoCloudClimate(CoordinatorEntity[KumoCloudCoordinator], ClimateEntity):
             else:
                 changes["spCool"] = temp
         if changes:
-            await self._async_patch(changes)
+            await self._async_command(changes)
 
     async def async_set_fan_mode(self, fan_mode: str) -> None:
-        """Set the fan speed, unless the unit has the fan locked."""
-        if self.fan_speed_locked and fan_mode != "auto":
-            raise ServiceValidationError(
-                f"{self._device.name} is in dry mode, which locks the fan to "
-                "automatic. Switch it to cool, heat or fan-only to set a speed."
-            )
-        await self._async_patch({"fanSpeed": FAN_MODE_TO_CLOUD[fan_mode]})
+        """Set the fan speed.
+
+        Deliberately not blocked when `fan_speed_locked` is true. That flag is
+        derived from the cloud's `operationMode`, which lags reality by minutes,
+        so refusing the call means rejecting a legitimate fan change made just
+        after leaving dry mode -- the state we read is still stale. Send it and
+        let the unit decide; `fan_speed_locked` is advisory only.
+        """
+        await self._async_command({"fanSpeed": FAN_MODE_TO_CLOUD[fan_mode]})
 
     async def async_set_swing_mode(self, swing_mode: str) -> None:
         """Start or stop the vane sweep."""
-        await self._async_patch({"airDirection": SWING_MODE_TO_CLOUD[swing_mode]})
+        await self._async_command({"airDirection": SWING_MODE_TO_CLOUD[swing_mode]})
 
-    async def _async_patch(self, changes: dict[str, Any]) -> None:
-        """Write to the unit and refresh this entity from the response."""
-        await self.coordinator.async_patch(self._device.serial, changes)
+    async def _async_command(self, changes: dict[str, Any]) -> None:
+        """Send a command to the unit and refresh this entity."""
+        await self.coordinator.async_send_command(self._device.serial, changes)

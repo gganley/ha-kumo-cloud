@@ -64,7 +64,7 @@ class KumoDryModeSwitch(CoordinatorEntity[KumoCloudCoordinator], SwitchEntity):
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Switch the unit into dry mode."""
-        await self.coordinator.async_patch(
+        await self.coordinator.async_send_command(
             self._device.serial, {"power": 1, "operationMode": "dry"}
         )
 
@@ -78,6 +78,6 @@ class KumoDryModeSwitch(CoordinatorEntity[KumoCloudCoordinator], SwitchEntity):
         previous = self._state.get("previousOperationMode")
         if previous in (None, "", "dry"):
             previous = "cool"
-        await self.coordinator.async_patch(
+        await self.coordinator.async_send_command(
             self._device.serial, {"power": 1, "operationMode": previous}
         )

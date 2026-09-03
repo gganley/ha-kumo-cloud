@@ -81,3 +81,4 @@ class KumoDryModeSwitch(CoordinatorEntity[KumoCloudCoordinator], SwitchEntity):
         await self.coordinator.async_send_command(
             self._device.serial, {"power": 1, "operationMode": previous}
         )
+

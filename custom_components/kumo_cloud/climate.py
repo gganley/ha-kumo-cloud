@@ -109,6 +109,10 @@ class KumoCloudClimate(CoordinatorEntity[KumoCloudCoordinator], ClimateEntity):
             "cloud_connected": self._state.get("connected"),
             "wifi_rssi": self._state.get("rssi"),
             "fan_speed_locked": self.fan_speed_locked,
+            # The unit's actual speed, including values we cannot set --
+            # "quiet", and "auto" when it was chosen from the Comfort app.
+            # `fan_mode` reads None for those, so surface the truth here.
+            "cloud_fan_speed": self._state.get("fanSpeed"),
         }
 
     @property

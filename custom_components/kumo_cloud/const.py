@@ -32,27 +32,39 @@ MAX_TEMP_C = 31.0
 # intersect that list only at "low" -- a one-step slider, which is why Apple
 # Home could only ever send 0% or 100%.
 #
-# So we deliberately expose four of the five speeds under HomeKit's own names to
-# get a real four-notch slider, and include "auto" so the bridge also adds the
-# native Auto/Manual toggle. "quiet" is the one dropped: it sits between
-# superQuiet and low, so losing it costs the least range.
+# So we expose four of the five speeds under HomeKit's own names to get a real
+# four-notch slider. "quiet" is the one dropped: it sits between superQuiet and
+# low, so losing it costs the least range.
+#
+# "auto" is deliberately NOT offered. With the `heater_cooler` accessory type,
+# HomeKit's HeaterCooler service has no auto-fan characteristic, so the moment
+# an entity advertises an auto fan mode Home Assistant moves the whole fan onto
+# a separate linked Fanv2 service -- which costs the single-tile layout that is
+# the entire point of heater_cooler. See type_heater_coolers.py:
+#
+#     # The HeaterCooler service has no auto fan control, so when the entity
+#     # exposes an auto fan mode ... the fan is exposed through a full linked
+#     # fan service instead
+#
+# Auto is therefore set from the Comfort app, and reported (never set) here.
 FAN_MODE_TO_CLOUD = {
     "low": "superQuiet",
     "middle": "low",
     "medium": "powerful",
     "high": "superPowerful",
-    "auto": "auto",
 }
 
-# Reverse map. "quiet" is not settable from HA but the Comfort app and the
-# unit's own schedules can select it, so it still has to display as something.
+# Reverse map for display. "quiet" and "auto" are not settable from HA, but the
+# Comfort app and the unit's own schedules can select them, so they still have
+# to read back as something. "auto" has no HA equivalent in the list above, so
+# it reports as None and the raw value is surfaced via the `cloud_fan_speed`
+# attribute instead.
 CLOUD_TO_FAN_MODE = {
     "superQuiet": "low",
     "quiet": "low",
     "low": "middle",
     "powerful": "medium",
     "superPowerful": "high",
-    "auto": "auto",
 }
 
 # Vane / swing. The unit exposes discrete vane positions plus a sweep; HomeKit

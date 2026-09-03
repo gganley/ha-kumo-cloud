@@ -133,37 +133,35 @@ same account, and it is tracked upstream as
 local API — they just reject unauthenticated requests — so if the credentials
 ever become obtainable again, a local path is worth adding.
 
-## Accessory type: heater_cooler, and why `auto` is not offered
+## Accessory type: thermostat (deliberately, not heater_cooler)
 
-Expose these entities with the **`heater_cooler`** accessory type (Home
-Assistant 2026.9+):
+Expose these entities with the **`thermostat`** accessory type:
 
 ```yaml
 homekit:
   entity_config:
     climate.home_office:
-      type: heater_cooler
+      type: thermostat
 ```
 
-HeaterCooler puts `RotationSpeed` and `SwingMode` on the accessory's *own*
-service, so Apple Home renders mode, temperature, thresholds, fan speed and
-swing on **one tile**. The older Thermostat type instead hangs the fan off a
-linked Fanv2 service, which Apple splits into a second control.
+Set it **explicitly**. Home Assistant 2026.9+ auto-routes a climate entity with
+two or more fan speeds (or a swing mode) to the newer `heater_cooler` accessory,
+and you do not want that here.
 
-That is also why `auto` is absent from `fan_modes`. Per the HomeKit spec the
-HeaterCooler service has no auto-fan characteristic, so Home Assistant falls
-back to the linked-fan layout the moment an entity advertises one — losing the
-single tile. From `type_heater_coolers.py`:
+`heater_cooler` sounds better on paper: it carries `RotationSpeed` and
+`SwingMode` on the accessory's own service, so everything is nominally "one
+tile". In practice Apple's Home app then files fan speed and swing away **under
+the accessory's gear/settings menu**, one tap deeper. The `thermostat` accessory
+instead shows the mode buttons (off / heat / cool / auto) and the fan speed
+slider together in the accessory view, which is where you actually want them.
+It was tried both ways on real hardware; `thermostat` is better.
 
-```python
-# The HeaterCooler service has no auto fan control, so when the entity
-# exposes an auto fan mode ... the fan is exposed through a full linked
-# fan service instead
-```
+Because we are on `thermostat`, advertising an auto fan mode costs nothing — it
+becomes the linked fan service's `TargetFanState` — so `auto` stays in
+`fan_modes` and is settable from Home Assistant.
 
-You can have the single tile, or fan auto in HomeKit — not both. This
-integration chooses the tile. Auto is still *reported*: when the Comfort app or
-a unit schedule selects it, `fan_mode` reads `None` and the real value appears
-in the **`cloud_fan_speed`** attribute. Setting auto is done from the Comfort
-app. To go the other way, add `"auto": "auto"` back to `FAN_MODE_TO_CLOUD` in
-`const.py` and drop the `heater_cooler` type.
+Two speeds still are not reachable from HomeKit: **`quiet`** (HomeKit's slider
+vocabulary has only four names, so one of the five hardware speeds had to go)
+and nothing else. Both `quiet` and `auto` read back correctly when set from the
+Comfort app, via the **`cloud_fan_speed`** attribute, which always reports the
+unit's true speed even when `fan_mode` cannot represent it.

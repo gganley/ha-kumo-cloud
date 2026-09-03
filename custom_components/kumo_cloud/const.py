@@ -36,22 +36,24 @@ MAX_TEMP_C = 31.0
 # four-notch slider. "quiet" is the one dropped: it sits between superQuiet and
 # low, so losing it costs the least range.
 #
-# "auto" is deliberately NOT offered. With the `heater_cooler` accessory type,
-# HomeKit's HeaterCooler service has no auto-fan characteristic, so the moment
-# an entity advertises an auto fan mode Home Assistant moves the whole fan onto
-# a separate linked Fanv2 service -- which costs the single-tile layout that is
-# the entire point of heater_cooler. See type_heater_coolers.py:
+# "auto" IS offered. These entities are exposed with the **thermostat**
+# accessory type, not `heater_cooler`, which is a deliberate choice:
 #
-#     # The HeaterCooler service has no auto fan control, so when the entity
-#     # exposes an auto fan mode ... the fan is exposed through a full linked
-#     # fan service instead
+#   - Thermostat puts the mode buttons (off/heat/cool/auto) and the fan speed
+#     slider together in the accessory view, which is where you actually want
+#     them.
+#   - HeaterCooler technically gets fan speed onto the accessory's own service,
+#     but Apple's Home app then files fan speed and swing away under the
+#     accessory's gear/settings menu -- a tap deeper, and worse in practice.
 #
-# Auto is therefore set from the Comfort app, and reported (never set) here.
+# Because we are on Thermostat, advertising an auto fan mode costs nothing (it
+# becomes the linked fan service's TargetFanState), so auto stays available.
 FAN_MODE_TO_CLOUD = {
     "low": "superQuiet",
     "middle": "low",
     "medium": "powerful",
     "high": "superPowerful",
+    "auto": "auto",
 }
 
 # Reverse map for display. "quiet" and "auto" are not settable from HA, but the
@@ -65,6 +67,7 @@ CLOUD_TO_FAN_MODE = {
     "low": "middle",
     "powerful": "medium",
     "superPowerful": "high",
+    "auto": "auto",
 }
 
 # Vane / swing. The unit exposes discrete vane positions plus a sweep; HomeKit

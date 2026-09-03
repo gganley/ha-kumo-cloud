@@ -12,6 +12,7 @@ from homeassistant.components.climate import (
     HVACMode,
 )
 from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
+from homeassistant.exceptions import ServiceValidationError
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC, DeviceInfo
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
@@ -108,7 +109,18 @@ class KumoCloudClimate(CoordinatorEntity[KumoCloudCoordinator], ClimateEntity):
         return {
             "cloud_connected": self._state.get("connected"),
             "wifi_rssi": self._state.get("rssi"),
+            "fan_speed_locked": self.fan_speed_locked,
         }
+
+    @property
+    def fan_speed_locked(self) -> bool:
+        """Return whether the unit is currently refusing fan-speed changes.
+
+        In dry (dehumidify) mode the unit drives the fan itself to manage coil
+        temperature and rejects any speed we send: the cloud PATCH is accepted
+        but comes straight back with fanSpeed "auto".
+        """
+        return self._state.get("operationMode") == "dry"
 
     @property
     def supported_features(self) -> ClimateEntityFeature:
@@ -209,7 +221,12 @@ class KumoCloudClimate(CoordinatorEntity[KumoCloudCoordinator], ClimateEntity):
             await self._async_patch(changes)
 
     async def async_set_fan_mode(self, fan_mode: str) -> None:
-        """Set the fan speed."""
+        """Set the fan speed, unless the unit has the fan locked."""
+        if self.fan_speed_locked and fan_mode != "auto":
+            raise ServiceValidationError(
+                f"{self._device.name} is in dry mode, which locks the fan to "
+                "automatic. Switch it to cool, heat or fan-only to set a speed."
+            )
         await self._async_patch({"fanSpeed": FAN_MODE_TO_CLOUD[fan_mode]})
 
     async def async_set_swing_mode(self, swing_mode: str) -> None:

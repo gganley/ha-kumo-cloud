@@ -74,3 +74,20 @@ different four.
 Copy `custom_components/kumo_cloud` into your HA `config/custom_components/`,
 restart, then add **Kumo Cloud** from Settings → Devices & Services. Or run
 `./deploy.sh --restart`.
+
+## Dry mode
+
+In dry (dehumidify) mode the unit drives the fan itself and ignores any speed
+you set -- the Comfort app cannot change it either, so this is the hardware's
+behaviour, not an API limit. The cloud's reported `fanSpeed` is also sticky in
+this mode: a write is accepted but the value that comes back is the one the
+adapter last reported, which can lag by minutes.
+
+The climate entity therefore exposes `fan_speed_locked` and refuses a fan-speed
+call while in dry mode, rather than letting it silently do nothing.
+
+HomeKit's Thermostat service has only Off/Heat/Cool/Auto, and Home Assistant's
+bridge drops `HVACMode.DRY` whenever `COOL` is also offered, so dry is
+unreachable from Apple Home through the thermostat. Each unit therefore also
+gets a **Dry mode** switch, which Apple Home and Siri can see. Turning it off
+returns the unit to its `previousOperationMode`.
